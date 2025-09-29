@@ -1,4 +1,4 @@
 (library
-  (public_name synchronizer)
-  (modules synchronizer)
-  (libraries prelude))
+ (public_name synchronizer)
+ (modules synchronizer)
+ (libraries prelude))
