@@ -35,5 +35,6 @@
     (>= 3.0.0)
     :with-doc))
   ;; test
+  (alcotest :with-test)
   ;; dev
   (ocamlformat :with-dev-setup)))
