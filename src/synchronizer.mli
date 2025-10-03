@@ -46,8 +46,8 @@ val init :
      < popper : 'p ; writer : 'w ; reader : 'r ; state : 'state > synchro_builder
   -> < synchro : 'state synchro
      ; poppers : ('p, 'state) poppers
-     ; readers : ('p, 'state) readers
-     ; writers : ('p, 'state) writers >
+     ; readers : ('r, 'state) readers
+     ; writers : ('w, 'state) writers >
 
 (** Make a new pledge to the synchronizer (see module doc).*)
 val make_pledge : 'state synchro -> unit
