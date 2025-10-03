@@ -3,3 +3,10 @@
  (modules synchronizer)
  (libraries prelude)
  (instrumentation (backend bisect_ppx)))
+
+(library
+ (public_name synchronizer.collections)
+ (name synchronizer_collections)
+ (modules collections)
+ (libraries synchronizer prelude)
+ (instrumentation (backend bisect_ppx)))
