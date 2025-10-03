@@ -15,5 +15,7 @@ pkgs.mkShell {
   ];
   buildInputs = with pkgs.ocamlPackages; [
     prelude
+    alcotest
+    bisect_ppx
   ];
 }
