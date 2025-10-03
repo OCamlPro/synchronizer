@@ -24,19 +24,19 @@ type _ synchro_builder =
 
 type 'state synchro
 
-type (_, 'state) poppers =
+type (_, _) poppers =
   | [] : (unit, _) poppers
   | ( :: ) :
       (?pledge:bool -> 'state synchro -> 'get option) * ('ps, 'state) poppers
       -> ('get * 'ps, 'state) poppers
 
-type (_, 'state) writers =
+type (_, _) writers =
   | [] : (unit, _) writers
   | ( :: ) :
       ('write -> 'state synchro -> unit) * ('ws, 'state) writers
       -> ('read * 'ws, 'state) writers
 
-type (_, 'state) readers =
+type (_, _) readers =
   | [] : (unit, _) readers
   | ( :: ) :
       ('state synchro -> 'read) * ('rs, 'state) readers
@@ -50,13 +50,13 @@ val init :
      ; writers : ('w, 'state) writers >
 
 (** Make a new pledge to the synchronizer (see module doc).*)
-val make_pledge : 'state synchro -> unit
+val make_pledge : _ synchro -> unit
 
 (** End one pledge. *)
-val end_pledge : 'state synchro -> unit
+val end_pledge : _ synchro -> unit
 
 (** Mark the synchronizer closed.
 
     The synchronizer will return None on every subsequent get that would
     otherwise block.*)
-val close : 'state synchro -> unit
+val close : _ synchro -> unit
