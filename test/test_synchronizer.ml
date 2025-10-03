@@ -4,7 +4,8 @@
 
 (** Helper functions to reduce duplication *)
 
-(** Create a simple queue-based synchronizer with signal *)
+(** Create a simple queue-based synchronizer.
+    Uses Condition.signal since each write adds exactly one work unit. *)
 let make_queue_sync () =
   let queue = Queue.create () in
   let getter () =
@@ -13,18 +14,6 @@ let make_queue_sync () =
   let writer v cond =
     Queue.push v queue;
     Condition.signal cond
-  in
-  Synchronizer.init getter writer
-
-(** Create a queue-based synchronizer with broadcast *)
-let make_queue_sync_broadcast () =
-  let queue = Queue.create () in
-  let getter () =
-    if Queue.is_empty queue then None else Some (Queue.pop queue)
-  in
-  let writer v cond =
-    Queue.push v queue;
-    Condition.broadcast cond
   in
   Synchronizer.init getter writer
 
@@ -188,7 +177,7 @@ let test_producer_consumer () =
   Alcotest.(check int) "producer/consumer sum" 55 !sum
 
 let test_multiple_workers () =
-  let sync = make_queue_sync_broadcast () in
+  let sync = make_queue_sync () in
 
   for i = 1 to 100 do
     Synchronizer.write i sync
@@ -212,7 +201,7 @@ let test_multiple_workers () =
   Alcotest.(check bool) "all workers did work" true all_worked
 
 let test_concurrent_write_get () =
-  let sync = make_queue_sync_broadcast () in
+  let sync = make_queue_sync () in
   let count = ref 0 in
   let mutex = Mutex.create () in
 
@@ -245,7 +234,7 @@ let test_graph_traversal () =
   in
   let writer v cond =
     Queue.push v queue;
-    Condition.broadcast cond
+    Condition.signal cond
   in
   let sync = Synchronizer.init getter writer in
 
@@ -267,7 +256,7 @@ let test_graph_traversal () =
 (** Stress test *)
 
 let test_stress () =
-  let sync = make_queue_sync_broadcast () in
+  let sync = make_queue_sync () in
 
   for i = 1 to 1000 do
     Synchronizer.write i sync
