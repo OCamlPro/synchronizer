@@ -25,20 +25,20 @@ type _ synchro_builder =
 type 'state synchro
 
 type (_, 'state) poppers =
-  | Nil : (unit, _) poppers
-  | Cons :
+  | [] : (unit, _) poppers
+  | ( :: ) :
       (?pledge:bool -> 'state synchro -> 'get option) * ('ps, 'state) poppers
       -> ('get * 'ps, 'state) poppers
 
 type (_, 'state) writers =
-  | Nil : (unit, _) writers
-  | Cons :
+  | [] : (unit, _) writers
+  | ( :: ) :
       ('write -> 'state synchro -> unit) * ('ws, 'state) writers
       -> ('read * 'ws, 'state) writers
 
 type (_, 'state) readers =
-  | Nil : (unit, _) readers
-  | Cons :
+  | [] : (unit, _) readers
+  | ( :: ) :
       ('state synchro -> 'read) * ('rs, 'state) readers
       -> ('read * 'rs, 'state) readers
 

@@ -33,20 +33,20 @@ type 'state synchro =
   }
 
 type (_, 'state) poppers =
-  | Nil : (unit, _) poppers
-  | Cons :
+  | [] : (unit, _) poppers
+  | ( :: ) :
       (?pledge:bool -> 'state synchro -> 'get option) * ('ps, 'state) poppers
       -> ('get * 'ps, 'state) poppers
 
 type (_, 'state) writers =
-  | Nil : (unit, _) writers
-  | Cons :
+  | [] : (unit, _) writers
+  | ( :: ) :
       ('write -> 'state synchro -> unit) * ('ws, 'state) writers
       -> ('read * 'ws, 'state) writers
 
 type (_, 'state) readers =
-  | Nil : (unit, _) readers
-  | Cons :
+  | [] : (unit, _) readers
+  | ( :: ) :
       ('state synchro -> 'read) * ('rs, 'state) readers
       -> ('read * 'rs, 'state) readers
 
@@ -57,7 +57,7 @@ let rec build_all :
     =
  fun builder ->
   match builder with
-  | Init init_fn -> (init_fn, Nil, Nil, Nil)
+  | Init init_fn -> (init_fn, [], [], [])
   | AddPopper (getter, prev) ->
     let init_fn, prev_poppers, prev_writers, prev_readers = build_all prev in
     let popper ?(pledge = true) synchro =
@@ -75,20 +75,20 @@ let rec build_all :
       in
       Mutex.protect synchro.mutex (fun () -> inner_loop pledge synchro)
     in
-    (init_fn, Cons (popper, prev_poppers), prev_writers, prev_readers)
+    (init_fn, popper :: prev_poppers, prev_writers, prev_readers)
   | AddWriter (writer, prev) ->
     let init_fn, prev_poppers, prev_writers, prev_readers = build_all prev in
     let write_fn value synchro =
       Mutex.protect synchro.mutex (fun () ->
           writer value synchro.cond synchro.state)
     in
-    (init_fn, prev_poppers, Cons (write_fn, prev_writers), prev_readers)
+    (init_fn, prev_poppers, write_fn :: prev_writers, prev_readers)
   | AddReader (reader, prev) ->
     let init_fn, prev_poppers, prev_writers, prev_readers = build_all prev in
     let read_fn synchro =
       Mutex.protect synchro.mutex (fun () -> reader synchro.state)
     in
-    (init_fn, prev_poppers, prev_writers, Cons (read_fn, prev_readers))
+    (init_fn, prev_poppers, prev_writers, read_fn :: prev_readers)
 
 let init builder =
   let init_fn, poppers, writers, readers = build_all builder in
