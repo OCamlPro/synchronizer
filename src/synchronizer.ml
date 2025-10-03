@@ -18,20 +18,20 @@ let init getter writter =
   ; closed = false
   }
 
-let get synchro pledge =
-  let rec inner_loop synchro pledge =
+let get ?(pledge = true) synchro =
+  let rec inner_loop pledge synchro =
     match synchro.getter () with
     | None when synchro.pledges = 0 || synchro.closed ->
       Condition.broadcast synchro.cond;
       None
     | None ->
       Condition.wait synchro.cond synchro.mutex;
-      inner_loop synchro pledge
+      inner_loop pledge synchro
     | Some _ as v ->
       if pledge then synchro.pledges <- synchro.pledges + 1;
       v
   in
-  Mutex.protect synchro.mutex (fun () -> inner_loop synchro pledge)
+  Mutex.protect synchro.mutex (fun () -> inner_loop pledge synchro)
 
 let write v { writter; cond; mutex; _ } =
   Mutex.protect mutex (fun () -> writter v cond)
@@ -47,14 +47,14 @@ let end_pledge synchro =
   if Int.equal synchro.pledges 0 then Condition.broadcast synchro.cond;
   Mutex.unlock synchro.mutex
 
-let fail q =
+let close q =
   Mutex.lock q.mutex;
   q.closed <- true;
   Condition.broadcast q.cond;
   Mutex.unlock q.mutex
 
 let rec work_while f q =
-  match get q true with
+  match get q with
   | None -> ()
   | Some v ->
     let () = f v (fun v -> write v q) in
