@@ -1,0 +1,55 @@
+name: deploy
+on:
+  push:
+    branches:
+      - main
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    container:
+      image: nixos/nix:latest
+    steps:
+      - name: deploy
+        run: |
+          set -x
+
+          # GitHub sucks
+          export HOME=/root
+          cd $HOME
+
+          git clone https://github.com/${{ github.repository }}.git
+          cd $(basename ${{ github.repository }})
+
+          echo "github.event_name is ${{ github.event_name }}"
+
+          # fetch the current PR/branch
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "Fetching PR branch"
+            git fetch origin pull/${{ github.event.pull_request.number }}/head:pr-${{ github.event.pull_request.number }}
+            git checkout pr-${{ github.event.pull_request.number }}
+          else
+            echo "Fetching current branch"
+            git checkout ${{ github.ref_name }}
+          fi
+
+          mkdir doc
+          touch doc/.nojekyll
+
+          nix-shell --run "
+            dune build @doc &&
+            mv _build/default/_doc/_html doc
+          "
+
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} gh-pages
+          cd gh-pages
+          git checkout gh-pages || git checkout --orphan gh-pages
+
+          rm -rf ./*
+          cp -r ../doc/* ./
+
+          git add .
+          git commit -m "Deploy docs from ${GITHUB_SHA}" || echo "No changes to commit"
+          git push origin gh-pages
