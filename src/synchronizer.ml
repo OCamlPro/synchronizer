@@ -4,16 +4,16 @@ type ('get, 'write) t =
   { mutex : Mutex.t
   ; cond : Condition.t
   ; getter : unit -> 'get option
-  ; writter : 'write -> Condition.t -> unit
+  ; writer : 'write -> Condition.t -> unit
   ; mutable pledges : int
   ; mutable closed : bool
   }
 
-let init getter writter =
+let init getter writer =
   { mutex = Mutex.create ()
   ; cond = Condition.create ()
   ; getter
-  ; writter
+  ; writer
   ; pledges = 0
   ; closed = false
   }
@@ -33,8 +33,8 @@ let get ?(pledge = true) synchro =
   in
   Mutex.protect synchro.mutex (fun () -> inner_loop pledge synchro)
 
-let write v { writter; cond; mutex; _ } =
-  Mutex.protect mutex (fun () -> writter v cond)
+let write v { writer; cond; mutex; _ } =
+  Mutex.protect mutex (fun () -> writer v cond)
 
 let make_pledge synchro =
   Mutex.lock synchro.mutex;

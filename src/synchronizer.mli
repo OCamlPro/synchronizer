@@ -2,7 +2,7 @@
     "getting" and "writing" work units to a common state keeper.
 
     The main idea of this module, is that it allows one to (more) easily go from
-    a sequential algorithm to a parralel one.
+    a sequential algorithm to a parallel one.
 
     {2 "Get-work-to-do/write-work-done" sequential algorithms}
 
@@ -15,7 +15,7 @@
     + End the processing of this work unit
 
     Most, if not all algorithm built around queues, stacks, and priority queues
-    can be formulated this way: {i getting} a work unit is simply poping from
+    can be formulated this way: {i getting} a work unit is simply popping from
     the queue, and {i writing} updates is simply pushing new work units.
     However, this algorithm is more general: for example the work pool could be
     a tree, {i getting} a new unit of work would entail some search of the tree,
@@ -24,7 +24,7 @@
 
     {2 Turning it into a parallel algorithm}
 
-    {3 Addings "work in progress" semantics to the work pool}
+    {3 Adding "work in progress" semantics to the work pool}
 
     The first step to turn this sequential algorithm into a parallel one is to
     add a notion of "ongoing work" to our central data structure. When
@@ -46,8 +46,8 @@
     [getter] returns the next work unit, or None if their is (currently) no work
     unit to be scheduled. This is only {i currently} because another thread may
     later enqueue some new work unit. The work pool does not have to deal with
-    how many threads are still live this this done by the synchronizer itself
-    (it is actually its main added value). The type [get] is the one of the work
+    how many threads are still live this is done by the synchronizer itself (it
+    is actually its main added value). The type [get] is the one of the work
     unit.
 
     {[
@@ -62,13 +62,13 @@
 
     Finally, one can create the synchronizer with
     {[
-      synchronizer = init getter writter
+      synchronizer = init getter writer
     ]}
 
     {3 The notion of pledges}
 
-    As mentionned before, when going to non-sequential, the main difference is
-    that work can now be "on going": threads mais hence still {i write} updated
+    As mentioned before, when going to non-sequential, the main difference is
+    that work can now be "on going": threads may hence still {i write} updated
     while processing a work unit. Knowing whether a work pool is empty is hence
     not sufficient to know whether or not one should stop the loop: we must also
     know whether someone else may re-enqueue new work. The synchronizer supports
@@ -101,7 +101,7 @@ val init :
 (** Get a work unit from the synchronizer. If pledge is true (its default
     value), atomically create a new pledge.
 
-    Blocks if no work unit is available but some may become in the future (ie.
+    Blocks if no work unit is available but some may become in the future (i.e.
     there are still active pledges on the synchronizer has not been marked
     closed).
 
@@ -111,7 +111,7 @@ val get : ?pledge:bool -> ('get, 'write) t -> 'get option
 (** Write the given update to the synchronizer.*)
 val write : 'write -> ('get, 'write) t -> unit
 
-(** Make a new pledge to the syncronizer (see module doc).*)
+(** Make a new pledge to the synchronizer (see module doc).*)
 val make_pledge : ('get, 'write) t -> unit
 
 (** End one pledge. *)
@@ -124,5 +124,5 @@ val end_pledge : ('get, 'write) t -> unit
 val close : ('get, 'write) t -> unit
 
 (** Run the provided closure on the synchronizer until the synchronizer is
-    exhausted (ie it returns None).*)
+    exhausted (i.e. it returns None).*)
 val work_while : ('get -> ('write -> unit) -> unit) -> ('get, 'write) t -> unit
