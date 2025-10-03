@@ -1,26 +1,21 @@
-type _ synchro_builder =
-  | Init :
-      (unit -> 'state)
-      -> < popper : unit ; writer : unit ; reader : unit ; state : 'state >
-         synchro_builder
-  | AddPopper :
-      ('state -> 'get option)
-      * < popper : 'p ; writer : 'w ; reader : 'r ; state : 'state >
-        synchro_builder
-      -> < popper : 'get * 'p ; writer : 'w ; reader : 'r ; state : 'state >
-         synchro_builder
-  | AddWriter :
-      ('write -> Condition.t -> 'state -> unit)
-      * < popper : 'p ; writer : 'w ; reader : 'r ; state : 'state >
-        synchro_builder
-      -> < popper : 'p ; writer : 'write * 'w ; reader : 'r ; state : 'state >
-         synchro_builder
-  | AddReader :
-      ('state -> 'read)
-      * < popper : 'p ; writer : 'w ; reader : 'r ; state : 'state >
-        synchro_builder
-      -> < popper : 'p ; writer : 'w ; reader : 'read * 'r ; state : 'state >
-         synchro_builder
+type _ synchro_builder
+
+val create : (unit -> 'state) -> < popper : unit ; writer : unit ; reader : unit ; state : 'state > synchro_builder
+
+val add_popper :
+     ('state -> 'get option)
+  -> < popper : 'p ; writer : 'w ; reader : 'r ; state : 'state > synchro_builder
+  -> < popper : 'get * 'p ; writer : 'w ; reader : 'r ; state : 'state > synchro_builder
+
+val add_writer :
+     ('write -> Condition.t -> 'state -> unit)
+  -> < popper : 'p ; writer : 'w ; reader : 'r ; state : 'state > synchro_builder
+  -> < popper : 'p ; writer : 'write * 'w ; reader : 'r ; state : 'state > synchro_builder
+
+val add_reader :
+     ('state -> 'read)
+  -> < popper : 'p ; writer : 'w ; reader : 'r ; state : 'state > synchro_builder
+  -> < popper : 'p ; writer : 'w ; reader : 'read * 'r ; state : 'state > synchro_builder
 
 type _ poppers =
   | [] : unit poppers

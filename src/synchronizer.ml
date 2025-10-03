@@ -24,6 +24,11 @@ type _ synchro_builder =
       -> < popper : 'p ; writer : 'w ; reader : 'read * 'r ; state : 'state >
          synchro_builder
 
+let create init_fn = Init init_fn
+let add_popper getter builder = AddPopper (getter, builder)
+let add_writer writer builder = AddWriter (writer, builder)
+let add_reader reader builder = AddReader (reader, builder)
+
 type 'state synchro =
   { mutex : Mutex.t
   ; cond : Condition.t
