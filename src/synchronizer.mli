@@ -42,21 +42,15 @@ type (_, _) readers =
       ('state synchro -> 'read) * ('rs, 'state) readers
       -> ('read * 'rs, 'state) readers
 
+type ('p, 'w, 'r, 'state) t =
+  { poppers : ('p, 'state) poppers
+  ; readers : ('r, 'state) readers
+  ; writers : ('w, 'state) writers
+  ; make_pledge : unit -> unit
+  ; end_pledge : unit -> unit
+  ; close : unit -> unit
+  }
+
 val init :
      < popper : 'p ; writer : 'w ; reader : 'r ; state : 'state > synchro_builder
-  -> < synchro : 'state synchro
-     ; poppers : ('p, 'state) poppers
-     ; readers : ('r, 'state) readers
-     ; writers : ('w, 'state) writers >
-
-(** Make a new pledge to the synchronizer (see module doc).*)
-val make_pledge : _ synchro -> unit
-
-(** End one pledge. *)
-val end_pledge : _ synchro -> unit
-
-(** Mark the synchronizer closed.
-
-    The synchronizer will return None on every subsequent get that would
-    otherwise block.*)
-val close : _ synchro -> unit
+  -> ('p, 'w, 'r, 'state) t

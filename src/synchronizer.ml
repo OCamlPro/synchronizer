@@ -91,6 +91,15 @@ let rec build_all : type p w r state.
     in
     (init_fn, prev_poppers, prev_writers, read_fn :: prev_readers)
 
+type ('p, 'w, 'r, 'state) t =
+  { poppers : ('p, 'state) poppers
+  ; readers : ('r, 'state) readers
+  ; writers : ('w, 'state) writers
+  ; make_pledge : unit -> unit
+  ; end_pledge : unit -> unit
+  ; close : unit -> unit
+  }
+
 let init builder =
   let init_fn, poppers, writers, readers = build_all builder in
   let synchro =
@@ -101,29 +110,24 @@ let init builder =
     ; closed = false
     }
   in
-  object
-    method synchro = synchro
-
-    method poppers = poppers
-
-    method readers = readers
-
-    method writers = writers
-  end
-
-let make_pledge synchro =
-  Mutex.lock synchro.mutex;
-  synchro.pledges <- synchro.pledges + 1;
-  Mutex.unlock synchro.mutex
-
-let end_pledge synchro =
-  Mutex.lock synchro.mutex;
-  synchro.pledges <- synchro.pledges - 1;
-  if Int.equal synchro.pledges 0 then Condition.broadcast synchro.cond;
-  Mutex.unlock synchro.mutex
-
-let close synchro =
-  Mutex.lock synchro.mutex;
-  synchro.closed <- true;
-  Condition.broadcast synchro.cond;
-  Mutex.unlock synchro.mutex
+  { poppers
+  ; readers
+  ; writers
+  ; make_pledge =
+      (fun () ->
+        Mutex.lock synchro.mutex;
+        synchro.pledges <- synchro.pledges + 1;
+        Mutex.unlock synchro.mutex)
+  ; end_pledge =
+      (fun () ->
+        Mutex.lock synchro.mutex;
+        synchro.pledges <- synchro.pledges - 1;
+        if Int.equal synchro.pledges 0 then Condition.broadcast synchro.cond;
+        Mutex.unlock synchro.mutex)
+  ; close =
+      (fun () ->
+        Mutex.lock synchro.mutex;
+        synchro.closed <- true;
+        Condition.broadcast synchro.cond;
+        Mutex.unlock synchro.mutex)
+  }
