@@ -11,20 +11,30 @@ let make_queue_sync () =
   let getter () =
     if Queue.is_empty queue then None else Some (Queue.pop queue)
   in
-  let writer v cond =
+  let writer v cond _state =
     Queue.push v queue;
     Condition.signal cond
   in
-  Synchronizer.init getter writer
+  Synchronizer.(
+    init
+      (create (fun () -> queue)
+      |> add_popper (fun _state -> getter ())
+      |> add_writer writer))
 
 (** Create a thread-safe counter worker *)
-let make_counter_worker count mutex sync =
-  Synchronizer.work_while
-    (fun _v _ ->
+let make_counter_worker count mutex (Synchronizer.Synchro sync) =
+  let [ popper ] = sync.poppers in
+  let rec loop () =
+    match popper () with
+    | None -> ()
+    | Some _v ->
       Mutex.lock mutex;
       count := !count + 1;
-      Mutex.unlock mutex)
-    sync
+      Mutex.unlock mutex;
+      sync.end_pledge ();
+      loop ()
+  in
+  loop ()
 
 (** Spawn and join multiple domains *)
 let run_domains workers =
@@ -34,23 +44,28 @@ let run_domains workers =
 (** Basic operations tests *)
 
 let test_empty_queue_no_pledges () =
-  let sync = make_queue_sync () in
-  let result = Synchronizer.get ~pledge:false sync in
+  let (Synchronizer.Synchro sync) = make_queue_sync () in
+  let [ popper ] = sync.poppers in
+  let result = popper ~pledge:false () in
   Alcotest.(check (option int)) "empty queue returns None" None result
 
 let test_get_single_item () =
-  let sync = make_queue_sync () in
-  Synchronizer.write 42 sync;
-  let result = Synchronizer.get ~pledge:false sync in
+  let (Synchronizer.Synchro sync) = make_queue_sync () in
+  let [ writer ] = sync.writers in
+  let [ popper ] = sync.poppers in
+  writer 42;
+  let result = popper ~pledge:false () in
   Alcotest.(check (option int)) "get returns Some 42" (Some 42) result
 
 let test_get_multiple_items () =
-  let sync = make_queue_sync () in
-  List.iter (fun i -> Synchronizer.write i sync) [ 1; 2; 3 ];
+  let (Synchronizer.Synchro sync) = make_queue_sync () in
+  let [ writer ] = sync.writers in
+  let [ popper ] = sync.poppers in
+  List.iter writer [ 1; 2; 3 ];
 
-  let r1 = Synchronizer.get ~pledge:false sync in
-  let r2 = Synchronizer.get ~pledge:false sync in
-  let r3 = Synchronizer.get ~pledge:false sync in
+  let r1 = popper ~pledge:false () in
+  let r2 = popper ~pledge:false () in
+  let r3 = popper ~pledge:false () in
 
   Alcotest.(check (option int)) "first item" (Some 1) r1;
   Alcotest.(check (option int)) "second item" (Some 2) r2;
@@ -59,60 +74,79 @@ let test_get_multiple_items () =
 (** Pledge mechanics tests *)
 
 let test_manual_pledge () =
-  let sync = make_queue_sync () in
+  let (Synchronizer.Synchro sync) = make_queue_sync () in
+  let [ writer ] = sync.writers in
+  let [ popper ] = sync.poppers in
 
-  Synchronizer.make_pledge sync;
-  Synchronizer.write 1 sync;
+  sync.make_pledge ();
+  writer 1;
 
-  let result = Synchronizer.get ~pledge:true sync in
+  let result = popper ~pledge:true () in
   Alcotest.(check (option int)) "get with pledge returns Some" (Some 1) result;
 
   (* End both pledges *)
-  Synchronizer.end_pledge sync;
-  Synchronizer.end_pledge sync;
+  sync.end_pledge ();
+  sync.end_pledge ();
 
-  let result = Synchronizer.get ~pledge:false sync in
+  let result = popper ~pledge:false () in
   Alcotest.(check (option int)) "no pledges, empty queue returns None" None result
 
 let test_get_creates_pledge () =
-  let sync = make_queue_sync () in
-  Synchronizer.write 1 sync;
+  let (Synchronizer.Synchro sync) = make_queue_sync () in
+  let [ writer ] = sync.writers in
+  let [ popper ] = sync.poppers in
+  writer 1;
 
-  let _ = Synchronizer.get sync in
-  Synchronizer.end_pledge sync;
+  let _ = popper () in
+  sync.end_pledge ();
 
-  let result = Synchronizer.get ~pledge:false sync in
+  let result = popper ~pledge:false () in
   Alcotest.(check (option int)) "after ending pledge, returns None" None result
 
 let test_blocking_on_pledge () =
-  let sync = make_queue_sync () in
-  Synchronizer.make_pledge sync;
+  let (Synchronizer.Synchro sync) = make_queue_sync () in
+  let [ writer ] = sync.writers in
+  let [ popper ] = sync.poppers in
+  sync.make_pledge ();
 
   let adder () =
     Unix.sleepf 0.01;
-    Synchronizer.write 42 sync;
-    Synchronizer.end_pledge sync
+    writer 42;
+    sync.end_pledge ()
   in
 
   let adder_domain = Domain.spawn adder in
-  let result = Synchronizer.get ~pledge:false sync in
+  let result = popper ~pledge:false () in
   Domain.join adder_domain;
 
   Alcotest.(check (option int)) "blocked until work available" (Some 42) result
 
 (** work_while tests *)
 
+let work_while popper end_pledge f =
+  let rec loop () =
+    match popper () with
+    | None -> ()
+    | Some v ->
+      f v ();
+      end_pledge ();
+      loop ()
+  in
+  loop ()
+
 let test_work_while_simple () =
-  let sync = make_queue_sync () in
-  Synchronizer.write 1 sync;
+  let (Synchronizer.Synchro sync) = make_queue_sync () in
+  let [ writer ] = sync.writers in
+  let [ popper ] = sync.poppers in
+  writer 1;
 
   let processed = ref [] in
-  let worker v write_fn =
+  let worker v () =
     processed := v :: !processed;
-    if v < 3 then write_fn (v + 1)
+    if v < 3 then writer (v + 1)
   in
 
-  Synchronizer.work_while worker sync;
+  work_while popper sync.end_pledge worker;
 
   Alcotest.(check int) "processed 3 items" 3 (List.length !processed);
   List.iter
@@ -120,56 +154,60 @@ let test_work_while_simple () =
     [ 1; 2; 3 ]
 
 let test_work_while_empty () =
-  let sync = make_queue_sync () in
+  let (Synchronizer.Synchro sync) = make_queue_sync () in
+  let [ popper ] = sync.poppers in
   let called = ref false in
-  let worker _v _write_fn = called := true in
+  let worker _v () = called := true in
 
-  Synchronizer.work_while worker sync;
+  work_while popper sync.end_pledge worker;
 
   Alcotest.(check bool) "worker not called on empty" false !called
 
 (** Close functionality tests *)
 
 let test_close_returns_none () =
-  let sync = make_queue_sync () in
-  Synchronizer.make_pledge sync;
-  Synchronizer.close sync;
+  let (Synchronizer.Synchro sync) = make_queue_sync () in
+  let [ popper ] = sync.poppers in
+  sync.make_pledge ();
+  sync.close ();
 
-  let result = Synchronizer.get ~pledge:false sync in
+  let result = popper ~pledge:false () in
   Alcotest.(check (option int)) "closed returns None" None result;
-  Synchronizer.end_pledge sync
+  sync.end_pledge ()
 
 let test_close_with_items () =
-  let sync = make_queue_sync () in
-  Synchronizer.write 42 sync;
-  Synchronizer.close sync;
+  let (Synchronizer.Synchro sync) = make_queue_sync () in
+  let [ writer ] = sync.writers in
+  let [ popper ] = sync.poppers in
+  writer 42;
+  sync.close ();
 
-  let result = Synchronizer.get ~pledge:false sync in
+  let result = popper ~pledge:false () in
   Alcotest.(check (option int)) "gets item before close takes effect" (Some 42) result;
 
-  let result2 = Synchronizer.get ~pledge:false sync in
+  let result2 = popper ~pledge:false () in
   Alcotest.(check (option int)) "returns None after close" None result2
 
 (** Concurrent operations tests *)
 
 let test_producer_consumer () =
-  let sync = make_queue_sync () in
+  let (Synchronizer.Synchro sync) = make_queue_sync () in
+  let [ writer ] = sync.writers in
+  let [ popper ] = sync.poppers in
   let sum = ref 0 in
   let mutex = Mutex.create () in
 
   let producer () =
     for i = 1 to 10 do
-      Synchronizer.write i sync
+      writer i
     done
   in
 
   let consumer () =
-    Synchronizer.work_while
-      (fun v _ ->
-        Mutex.lock mutex;
-        sum := !sum + v;
-        Mutex.unlock mutex)
-      sync
+    work_while popper sync.end_pledge (fun v () ->
+      Mutex.lock mutex;
+      sum := !sum + v;
+      Mutex.unlock mutex)
   in
 
   run_domains [| producer; consumer |];
@@ -177,19 +215,19 @@ let test_producer_consumer () =
   Alcotest.(check int) "producer/consumer sum" 55 !sum
 
 let test_multiple_workers () =
-  let sync = make_queue_sync () in
+  let (Synchronizer.Synchro sync) = make_queue_sync () in
+  let [ writer ] = sync.writers in
+  let [ popper ] = sync.poppers in
 
   for i = 1 to 100 do
-    Synchronizer.write i sync
+    writer i
   done;
 
   let results = Array.make 4 0 in
   let worker id () =
-    Synchronizer.work_while
-      (fun v _ ->
-        results.(id) <- results.(id) + v;
-        Unix.sleepf 0.0001)
-      sync
+    work_while popper sync.end_pledge (fun v () ->
+      results.(id) <- results.(id) + v;
+      Unix.sleepf 0.0001)
   in
 
   run_domains (Array.init 4 (fun i -> worker i));
@@ -201,15 +239,16 @@ let test_multiple_workers () =
   Alcotest.(check bool) "all workers did work" true all_worked
 
 let test_concurrent_write_get () =
-  let sync = make_queue_sync () in
+  let (Synchronizer.Synchro sync) = make_queue_sync () in
+  let [ writer ] = sync.writers in
   let count = ref 0 in
   let mutex = Mutex.create () in
 
   for i = 1 to 100 do
-    Synchronizer.write i sync
+    writer i
   done;
 
-  run_domains (Array.init 4 (fun _ -> fun () -> make_counter_worker count mutex sync));
+  run_domains (Array.init 4 (fun _ -> fun () -> make_counter_worker count mutex (Synchro sync)));
 
   Alcotest.(check int) "all items processed" 100 !count
 
@@ -219,7 +258,7 @@ let test_graph_traversal () =
   let mutex = Mutex.create () in
 
   let queue = Queue.create () in
-  let getter () =
+  let getter _state =
     let rec find () =
       if Queue.is_empty queue then None
       else
@@ -232,20 +271,33 @@ let test_graph_traversal () =
     in
     find ()
   in
-  let writer v cond =
+  let writer v cond _state =
     Queue.push v queue;
     Condition.signal cond
   in
-  let sync = Synchronizer.init getter writer in
+  let (Synchronizer.Synchro sync) =
+    Synchronizer.(
+      init
+        (create (fun () -> ())
+        |> add_popper getter
+        |> add_writer writer))
+  in
+  let [ writer_fn ] = sync.writers in
+  let [ popper ] = sync.poppers in
 
-  Synchronizer.write 0 sync;
+  writer_fn 0;
 
   let worker () =
-    Synchronizer.work_while
-      (fun node write_fn ->
-        List.iter write_fn graph.(node);
-        Unix.sleepf 0.0001)
-      sync
+    let rec loop () =
+      match popper () with
+      | None -> ()
+      | Some node ->
+        List.iter writer_fn graph.(node);
+        Unix.sleepf 0.0001;
+        sync.end_pledge ();
+        loop ()
+    in
+    loop ()
   in
 
   run_domains [| worker; worker |];
@@ -256,16 +308,17 @@ let test_graph_traversal () =
 (** Stress test *)
 
 let test_stress () =
-  let sync = make_queue_sync () in
+  let (Synchronizer.Synchro sync) = make_queue_sync () in
+  let [ writer ] = sync.writers in
 
   for i = 1 to 1000 do
-    Synchronizer.write i sync
+    writer i
   done;
 
   let count = ref 0 in
   let mutex = Mutex.create () in
 
-  run_domains (Array.init 8 (fun _ -> fun () -> make_counter_worker count mutex sync));
+  run_domains (Array.init 8 (fun _ -> fun () -> make_counter_worker count mutex (Synchro sync)));
 
   Alcotest.(check int) "stress test processed all" 1000 !count
 
