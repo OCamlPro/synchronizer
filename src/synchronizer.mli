@@ -91,7 +91,7 @@
 
 (** A synchronizer with work units of type ['get] and updates of type ['write]
 *)
-type (!'get, !'write) t
+type (+'get, -'write) t
 
 (** Create a new synchronizer with the provided getter and writer (see module
     doc). *)
