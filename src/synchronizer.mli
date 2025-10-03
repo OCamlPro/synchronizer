@@ -22,35 +22,33 @@ type _ synchro_builder =
       -> < popper : 'p ; writer : 'w ; reader : 'read * 'r ; state : 'state >
          synchro_builder
 
-type 'state synchro
-
-type (_, _) poppers =
-  | [] : (unit, _) poppers
+type _ poppers =
+  | [] : unit poppers
   | ( :: ) :
-      (?pledge:bool -> 'state synchro -> 'get option) * ('ps, 'state) poppers
-      -> ('get * 'ps, 'state) poppers
+      (?pledge:bool -> unit -> 'get option) * 'ps poppers
+      -> ('get * 'ps) poppers
 
-type (_, _) writers =
-  | [] : (unit, _) writers
+type _ writers =
+  | [] : unit writers
   | ( :: ) :
-      ('write -> 'state synchro -> unit) * ('ws, 'state) writers
-      -> ('read * 'ws, 'state) writers
+      ('write -> unit) * 'ws writers
+      -> ('write * 'ws) writers
 
-type (_, _) readers =
-  | [] : (unit, _) readers
+type _ readers =
+  | [] : unit readers
   | ( :: ) :
-      ('state synchro -> 'read) * ('rs, 'state) readers
-      -> ('read * 'rs, 'state) readers
+      (unit -> 'read) * 'rs readers
+      -> ('read * 'rs) readers
 
-type ('p, 'w, 'r, 'state) t =
-  { poppers : ('p, 'state) poppers
-  ; readers : ('r, 'state) readers
-  ; writers : ('w, 'state) writers
+type ('p, 'w, 'r) t = Synchro :
+  { poppers : 'p poppers
+  ; readers : 'r readers
+  ; writers : 'w writers
   ; make_pledge : unit -> unit
   ; end_pledge : unit -> unit
   ; close : unit -> unit
-  }
+  } -> ('p, 'w, 'r) t
 
 val init :
      < popper : 'p ; writer : 'w ; reader : 'r ; state : 'state > synchro_builder
-  -> ('p, 'w, 'r, 'state) t
+  -> ('p, 'w, 'r) t

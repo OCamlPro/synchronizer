@@ -32,36 +32,34 @@ type 'state synchro =
   ; mutable closed : bool
   }
 
-type (_, _) poppers =
-  | [] : (unit, _) poppers
+type _ poppers =
+  | [] : unit poppers
   | ( :: ) :
-      (?pledge:bool -> 'state synchro -> 'get option) * ('ps, 'state) poppers
-      -> ('get * 'ps, 'state) poppers
+      (?pledge:bool -> unit -> 'get option) * 'ps poppers
+      -> ('get * 'ps) poppers
 
-type (_, _) writers =
-  | [] : (unit, _) writers
+type _ writers =
+  | [] : unit writers
   | ( :: ) :
-      ('write -> 'state synchro -> unit) * ('ws, 'state) writers
-      -> ('read * 'ws, 'state) writers
+      ('write -> unit) * 'ws writers
+      -> ('write * 'ws) writers
 
-type (_, _) readers =
-  | [] : (unit, _) readers
+type _ readers =
+  | [] : unit readers
   | ( :: ) :
-      ('state synchro -> 'read) * ('rs, 'state) readers
-      -> ('read * 'rs, 'state) readers
+      (unit -> 'read) * 'rs readers
+      -> ('read * 'rs) readers
 
 let rec build_all : type p w r state.
-     < popper : p ; writer : w ; reader : r ; state : state > synchro_builder
-  -> (unit -> state)
-     * (p, state) poppers
-     * (w, state) writers
-     * (r, state) readers =
- fun builder ->
+     state synchro
+  -> < popper : p ; writer : w ; reader : r ; state : state > synchro_builder
+  -> p poppers * w writers * r readers =
+ fun synchro builder ->
   match builder with
-  | Init init_fn -> (init_fn, [], [], [])
+  | Init _ -> ([], [], [])
   | AddPopper (getter, prev) ->
-    let init_fn, prev_poppers, prev_writers, prev_readers = build_all prev in
-    let popper ?(pledge = true) synchro =
+    let prev_poppers, prev_writers, prev_readers = build_all synchro prev in
+    let popper ?(pledge = true) () =
       let rec inner_loop pledge synchro =
         match getter synchro.state with
         | None when synchro.pledges = 0 || synchro.closed ->
@@ -76,32 +74,42 @@ let rec build_all : type p w r state.
       in
       Mutex.protect synchro.mutex (fun () -> inner_loop pledge synchro)
     in
-    (init_fn, popper :: prev_poppers, prev_writers, prev_readers)
+    (popper :: prev_poppers, prev_writers, prev_readers)
   | AddWriter (writer, prev) ->
-    let init_fn, prev_poppers, prev_writers, prev_readers = build_all prev in
-    let write_fn value synchro =
+    let prev_poppers, prev_writers, prev_readers = build_all synchro prev in
+    let write_fn value =
       Mutex.protect synchro.mutex (fun () ->
         writer value synchro.cond synchro.state )
     in
-    (init_fn, prev_poppers, write_fn :: prev_writers, prev_readers)
+    (prev_poppers, write_fn :: prev_writers, prev_readers)
   | AddReader (reader, prev) ->
-    let init_fn, prev_poppers, prev_writers, prev_readers = build_all prev in
-    let read_fn synchro =
+    let prev_poppers, prev_writers, prev_readers = build_all synchro prev in
+    let read_fn () =
       Mutex.protect synchro.mutex (fun () -> reader synchro.state)
     in
-    (init_fn, prev_poppers, prev_writers, read_fn :: prev_readers)
+    (prev_poppers, prev_writers, read_fn :: prev_readers)
 
-type ('p, 'w, 'r, 'state) t =
-  { poppers : ('p, 'state) poppers
-  ; readers : ('r, 'state) readers
-  ; writers : ('w, 'state) writers
+type ('p, 'w, 'r) t = Synchro :
+  { poppers : 'p poppers
+  ; readers : 'r readers
+  ; writers : 'w writers
   ; make_pledge : unit -> unit
   ; end_pledge : unit -> unit
   ; close : unit -> unit
-  }
+  } -> ('p, 'w, 'r) t
+
+let rec get_init_fn : type p w r state.
+     < popper : p ; writer : w ; reader : r ; state : state > synchro_builder
+  -> unit -> state =
+ fun builder ->
+  match builder with
+  | Init init_fn -> init_fn
+  | AddPopper (_, prev) -> get_init_fn prev
+  | AddWriter (_, prev) -> get_init_fn prev
+  | AddReader (_, prev) -> get_init_fn prev
 
 let init builder =
-  let init_fn, poppers, writers, readers = build_all builder in
+  let init_fn = get_init_fn builder in
   let synchro =
     { mutex = Mutex.create ()
     ; cond = Condition.create ()
@@ -110,7 +118,8 @@ let init builder =
     ; closed = false
     }
   in
-  { poppers
+  let poppers, writers, readers = build_all synchro builder in
+  Synchro { poppers
   ; readers
   ; writers
   ; make_pledge =
