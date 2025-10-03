@@ -32,13 +32,11 @@ jobs:
             git checkout ${{ github.ref_name }}
           fi
 
-          mkdir doc
-          touch doc/.nojekyll
-
           nix-shell --run "
             dune build @doc &&
             mv _build/default/_doc/_html doc
           "
+          touch doc/.nojekyll
 
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
