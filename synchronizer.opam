@@ -13,6 +13,7 @@ depends: [
   "ocaml" {>= "5.2"}
   "prelude" {>= "0.5"}
   "odoc" {>= "3.0.0" & with-doc}
+  "alcotest" {with-test}
   "ocamlformat" {with-dev-setup}
 ]
 build: [
