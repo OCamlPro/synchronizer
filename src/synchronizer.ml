@@ -18,45 +18,50 @@ let init getter writer =
   ; closed = false
   }
 
-let get ?(pledge = true) synchro =
+let get ~pledge synchro =
   let rec inner_loop pledge synchro =
-    match synchro.getter () with
-    | None when synchro.pledges = 0 || synchro.closed ->
-      Condition.broadcast synchro.cond;
-      None
-    | None ->
-      Condition.wait synchro.cond synchro.mutex;
-      inner_loop pledge synchro
-    | Some _ as v ->
-      if pledge then synchro.pledges <- synchro.pledges + 1;
-      v
+    if synchro.closed then (true, None)
+    else
+      match synchro.getter () with
+      | None ->
+        if synchro.pledges = 0 then (true, None)
+        else begin
+          Condition.wait synchro.cond synchro.mutex;
+          inner_loop pledge synchro
+        end
+      | next_element ->
+        if pledge then synchro.pledges <- synchro.pledges + 1;
+        (false, next_element)
   in
-  Mutex.protect synchro.mutex (fun () -> inner_loop pledge synchro)
+  Mutex.protect synchro.mutex (fun () ->
+    let should_broadcast, res = inner_loop pledge synchro in
+    if should_broadcast then Condition.broadcast synchro.cond;
+    res )
 
-let write v { writer; cond; mutex; _ } =
-  Mutex.protect mutex (fun () -> writer v cond)
+let write v synchro =
+  Mutex.protect synchro.mutex (fun () ->
+    synchro.writer v synchro.cond;
+    Condition.signal synchro.cond )
 
 let make_pledge synchro =
-  Mutex.lock synchro.mutex;
-  synchro.pledges <- synchro.pledges + 1;
-  Mutex.unlock synchro.mutex
+  Mutex.protect synchro.mutex (fun () ->
+    synchro.pledges <- synchro.pledges + 1 )
 
 let end_pledge synchro =
-  Mutex.lock synchro.mutex;
-  synchro.pledges <- synchro.pledges - 1;
-  if Int.equal synchro.pledges 0 then Condition.broadcast synchro.cond;
-  Mutex.unlock synchro.mutex
+  Mutex.protect synchro.mutex (fun () ->
+    synchro.pledges <- synchro.pledges - 1;
+    if synchro.pledges = 0 then Condition.broadcast synchro.cond )
 
-let close q =
-  Mutex.lock q.mutex;
-  q.closed <- true;
-  Condition.broadcast q.cond;
-  Mutex.unlock q.mutex
+let close synchro =
+  Mutex.protect synchro.mutex (fun () ->
+    synchro.closed <- true;
+    Condition.broadcast synchro.cond )
 
 let rec work_while f q =
-  match get q with
+  match get ~pledge:true q with
   | None -> ()
   | Some v ->
-    let () = f v (fun v -> write v q) in
-    end_pledge q;
+    Fun.protect
+      ~finally:(fun () -> end_pledge q)
+      (fun () -> f v (fun v -> write v q));
     work_while f q
