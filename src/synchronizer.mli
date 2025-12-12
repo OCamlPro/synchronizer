@@ -106,7 +106,7 @@ val init :
     closed).
 
     Returns None if no work unit is available and none will be in the future. *)
-val get : ?pledge:bool -> ('get, 'write) t -> 'get option
+val get : pledge:bool -> ('get, 'write) t -> 'get option
 
 (** Write the given update to the synchronizer.*)
 val write : 'write -> ('get, 'write) t -> unit
