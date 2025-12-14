@@ -51,14 +51,10 @@
     unit.
 
     {[
-      writer: write -> Condition.t -> unit
+      writer: write -> unit
     ]}
 
-    [writer] takes an update to apply to the work pool, of type [write], and a
-    condition variable. If this update makes a single new work unit available,
-    the condition variable should be signaled with [Condition.signal]. If more
-    than one unit of work are made available, it should be broadcast-signaled
-    with [Condition.broadcast].
+    [writer] takes an update to apply to the work pool, of type [write].
 
     Finally, one can create the synchronizer with
     {[
@@ -95,8 +91,7 @@ type (!+'get, !-'write) t
 
 (** Create a new synchronizer with the provided getter and writer (see module
     doc). *)
-val init :
-  (unit -> 'get option) -> ('write -> Condition.t -> unit) -> ('get, 'write) t
+val init : (unit -> 'get option) -> ('write -> unit) -> ('get, 'write) t
 
 (** Get a work unit from the synchronizer. If pledge is true (its default
     value), atomically create a new pledge.
