@@ -4,7 +4,7 @@ type ('get, 'write) t =
   { mutex : Mutex.t
   ; cond : Condition.t
   ; getter : unit -> 'get option
-  ; writer : 'write -> Condition.t -> unit
+  ; writer : 'write -> unit
   ; mutable pledges : int
   ; mutable closed : bool
   }
@@ -40,7 +40,7 @@ let get ~pledge synchro =
 
 let write v synchro =
   Mutex.protect synchro.mutex (fun () ->
-    synchro.writer v synchro.cond;
+    synchro.writer v;
     Condition.signal synchro.cond )
 
 let make_pledge synchro =
