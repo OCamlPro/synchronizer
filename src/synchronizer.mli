@@ -93,29 +93,28 @@ type (!+'get, !-'write) t
     doc). *)
 val init : (unit -> 'get option) -> ('write -> unit) -> ('get, 'write) t
 
-(** Get a work unit from the synchronizer. If pledge is true (its default
-    value), atomically create a new pledge.
+(** Get a work unit from the synchronizer. If pledge is true, atomically create
+    a new pledge.
 
     Blocks if no work unit is available but some may become in the future (i.e.
-    there are still active pledges on the synchronizer has not been marked
+    there are still active pledges and the synchronizer has not been marked
     closed).
 
     Returns None if no work unit is available and none will be in the future. *)
 val get : pledge:bool -> ('get, 'write) t -> 'get option
 
 (** Write the given update to the synchronizer.*)
-val write : 'write -> ('get, 'write) t -> unit
+val write : ('get, 'write) t -> 'write -> unit
 
 (** Make a new pledge to the synchronizer (see module doc).*)
-val make_pledge : ('get, 'write) t -> unit
+val new_pledge : ('get, 'write) t -> unit
 
 (** End one pledge. *)
 val end_pledge : ('get, 'write) t -> unit
 
 (** Mark the synchronizer closed.
 
-    The synchronizer will return None on every subsequent get that would
-    otherwise block.*)
+    The synchronizer will return None on every subsequent get. *)
 val close : ('get, 'write) t -> unit
 
 (** Run the provided closure on the synchronizer until the synchronizer is
