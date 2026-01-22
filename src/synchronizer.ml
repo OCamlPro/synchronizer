@@ -19,12 +19,14 @@ let init getter writer =
   }
 
 let new_pledge synchro =
-  Mutex.protect synchro.mutex (fun () -> incr synchro.pledges_count)
+  Mutex.protect synchro.mutex (fun () ->
+    incr synchro.pledges_count;
+    Condition.broadcast synchro.cond )
 
 let end_pledge synchro =
   Mutex.protect synchro.mutex (fun () ->
     decr synchro.pledges_count;
-    if !(synchro.pledges_count) <= 0 then Condition.broadcast synchro.cond )
+    Condition.broadcast synchro.cond )
 
 let close synchro =
   Mutex.protect synchro.mutex (fun () ->
@@ -51,6 +53,7 @@ let get ~pledge synchro =
         end
       | next_element ->
         if pledge then incr synchro.pledges_count;
+        Condition.broadcast synchro.cond;
         next_element
   in
   Mutex.protect synchro.mutex (fun () -> inner_loop pledge synchro)
@@ -58,9 +61,9 @@ let get ~pledge synchro =
 let write synchro v =
   Mutex.protect synchro.mutex (fun () ->
     if not !(synchro.closed) then begin
-      synchro.writer v;
-      Condition.signal synchro.cond
-    end )
+      synchro.writer v
+    end;
+    Condition.signal synchro.cond )
 
 let rec work_while f q =
   match get ~pledge:true q with

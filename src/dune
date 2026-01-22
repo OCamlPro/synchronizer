@@ -2,4 +2,5 @@
  (public_name synchronizer)
  (modules synchronizer)
  (libraries prelude)
- (instrumentation (backend bisect_ppx)))
+ (instrumentation
+  (backend bisect_ppx)))
